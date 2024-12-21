@@ -6,6 +6,7 @@ import main_db
 import platform
 import shutil
 
+
 ### READ SERVER_CONFIG.CFG TO GET IP AND PORT ###
 with open("./server.cfg", "r") as cfg:
     ip = '{0}'.format(cfg.readline()[7:].strip())
