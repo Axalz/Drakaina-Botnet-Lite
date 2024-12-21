@@ -16,6 +16,7 @@ https://discord.gg/ZV5mHBQy
 1) make sure python3 is installed
    
 2) if you would like to compile a python into an exe / bin file install nuitka with , " pip install nuitka "
+   or with pyinstall with " pip install pyinstaller "
    
 # Installation:
 
@@ -25,9 +26,9 @@ https://discord.gg/ZV5mHBQy
 
 3) run " python server.py "
   
-4) on target pc run " python stager.py "
+4) on target pc run " python stager.py " or run the compiled exe
    
-5) run " commandandcontrol.py " to communicate with target pc
+5) run " commandandcontrol.py " to communicate with target.
 
 ----------------------------
 
